@@ -9,7 +9,13 @@
   <link rel="icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=" />
 </head>
 <body>
-  <div id="topbar">
+  <div id="landing">
+    <h1>Book a lift</h1>
+    <p>Quickly request a ride — we'll show your location on the map.</p>
+    <button id="bookBtn">Book a lift</button>
+  </div>
+
+  <div id="topbar" class="hidden">
     <h1>Uber Prototype — Map</h1>
     <div id="controls">
       <button id="locateBtn">Center on me</button>
@@ -17,9 +23,9 @@
     </div>
   </div>
 
-  <div id="map"></div>
+  <div id="map" class="hidden"></div>
 
-  <div id="status" aria-live="polite"></div>
+  <div id="status" class="hidden" aria-live="polite"></div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script type="module" src="js/app.js"></script>
