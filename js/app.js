@@ -277,23 +277,22 @@ function attachRequestListener(requestId){
     const data = snap.val();
     const statusEl = ensureRideStatusEl();
     if (!data) {
-        try{ localStorage.removeItem('myRequestId'); }catch(e){}
-        if (statusEl) statusEl.textContent = 'Request removed or completed.';
-        // cleanup UI and listeners
-        try{ if (myDriverUnsub) { myDriverUnsub(); myDriverUnsub = null; } }catch(e){}
-        try{ if (myRequestUnsub) { myRequestUnsub(); myRequestUnsub = null; } }catch(e){}
-        myRequestId = null;
-        hideRidePanel();
-        return;
+      // request removed (likely completed by driver) — clear UI immediately
+      try{ localStorage.removeItem('myRequestId'); }catch(e){}
+      try{ if (myDriverUnsub) myDriverUnsub(); }catch(e){}
+      // remove status element if present
+      const rs = document.getElementById('rideStatus'); if (rs) rs.remove();
+      hideRidePanel();
+      showToast('Ride completed');
+      return;
     }
     if (data.status === 'completed'){
-        if (statusEl) statusEl.textContent = 'Your ride is complete.';
-        try{ localStorage.removeItem('myRequestId'); }catch(e){}
-        try{ if (myDriverUnsub) { myDriverUnsub(); myDriverUnsub = null; } }catch(e){}
-        try{ if (myRequestUnsub) { myRequestUnsub(); myRequestUnsub = null; } }catch(e){}
-        myRequestId = null;
-        hideRidePanel();
-        return;
+      try{ localStorage.removeItem('myRequestId'); }catch(e){}
+      try{ if (myDriverUnsub) myDriverUnsub(); }catch(e){}
+      const rs = document.getElementById('rideStatus'); if (rs) rs.remove();
+      hideRidePanel();
+      showToast('Ride completed');
+      return;
     }
     if (data.acceptedBy) {
       // show driver ETA — fetch driver location and subscribe to updates
