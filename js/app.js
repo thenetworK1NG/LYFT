@@ -277,13 +277,23 @@ function attachRequestListener(requestId){
     const data = snap.val();
     const statusEl = ensureRideStatusEl();
     if (!data) {
-      if (statusEl) statusEl.textContent = 'Request removed or completed.';
-      try{ localStorage.removeItem('myRequestId'); }catch(e){}
-      return;
+        try{ localStorage.removeItem('myRequestId'); }catch(e){}
+        if (statusEl) statusEl.textContent = 'Request removed or completed.';
+        // cleanup UI and listeners
+        try{ if (myDriverUnsub) { myDriverUnsub(); myDriverUnsub = null; } }catch(e){}
+        try{ if (myRequestUnsub) { myRequestUnsub(); myRequestUnsub = null; } }catch(e){}
+        myRequestId = null;
+        hideRidePanel();
+        return;
     }
     if (data.status === 'completed'){
-      if (statusEl) statusEl.textContent = 'Your ride is complete.';
-      return;
+        if (statusEl) statusEl.textContent = 'Your ride is complete.';
+        try{ localStorage.removeItem('myRequestId'); }catch(e){}
+        try{ if (myDriverUnsub) { myDriverUnsub(); myDriverUnsub = null; } }catch(e){}
+        try{ if (myRequestUnsub) { myRequestUnsub(); myRequestUnsub = null; } }catch(e){}
+        myRequestId = null;
+        hideRidePanel();
+        return;
     }
     if (data.acceptedBy) {
       // show driver ETA — fetch driver location and subscribe to updates
