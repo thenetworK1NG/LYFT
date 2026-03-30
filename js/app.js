@@ -1,4 +1,4 @@
-import {createMap, locateOnce, watchPosition, routeTo} from './map.js';
+import {createMap, locateOnce, watchPosition} from './map.js';
 
 const statusEl = document.getElementById('status');
 const locateBtn = document.getElementById('locateBtn');
@@ -6,9 +6,8 @@ const trackBtn = document.getElementById('trackBtn');
 const bookBtn = document.getElementById('bookBtn');
 let stopWatch = null;
 let map = null;
-let lastPosition = null; // {latitude, longitude}
-let currentRouteLayer = null;
-let destinationMarker = null;
+let lastKnownLatLng = null;
+let mapClickRegistered = false;
 
 document.addEventListener('DOMContentLoaded', () => {
   // Landing flow: user clicks Book to show map and locate quickly.
@@ -19,14 +18,15 @@ document.addEventListener('DOMContentLoaded', () => {
       setStatus('Locating…');
       try {
         const res = await locateOnce(map);
-        // res.position may be null for IP fallback
-        if (res && res.position && res.position.coords) {
-          lastPosition = { latitude: res.position.coords.latitude, longitude: res.position.coords.longitude };
+        // store last known latlng (marker from locateOnce)
+        if (res && res.marker) {
+          lastKnownLatLng = res.marker.getLatLng();
         }
         setStatus('Located you on the map.');
       } catch (err) {
         setStatus('Location error: ' + (err && (err.message || err.code) ? (err.message || err.code) : 'unknown'));
       }
+      ensureMapClick();
     });
   }
 
@@ -38,11 +38,13 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       setStatus('Locating…');
       try {
-        await locateOnce(map);
+        const res = await locateOnce(map);
+        if (res && res.marker) lastKnownLatLng = res.marker.getLatLng();
         setStatus('Located you on the map.');
       } catch (err) {
         setStatus('Location error: ' + (err && (err.message || err.code) ? (err.message || err.code) : 'unknown'));
       }
+      ensureMapClick();
     });
   }
 
@@ -53,11 +55,9 @@ document.addEventListener('DOMContentLoaded', () => {
         map = createMap('map');
       }
       if (!stopWatch) {
-        stopWatch = watchPosition(map, ({position} = {}) => {
+        stopWatch = watchPosition(map, (obj) => {
+          if (obj && obj.marker) lastKnownLatLng = obj.marker.getLatLng();
           setStatus('Tracking location (click to stop).');
-          if (position && position.coords) {
-            lastPosition = { latitude: position.coords.latitude, longitude: position.coords.longitude };
-          }
         });
         trackBtn.textContent = 'Stop tracking';
         setStatus('Tracking started.');
@@ -67,66 +67,33 @@ document.addEventListener('DOMContentLoaded', () => {
         trackBtn.textContent = 'Start tracking';
         setStatus('Tracking stopped.');
       }
-    });
-  }
-  // Map click -> route from current location to clicked point
-  // Add handler when map exists
-  const ensureMapClick = () => {
-    if (!map) return;
-    // avoid multiple handlers
-    if (map._hasRouteClick) return;
-    map._hasRouteClick = true;
-    map.on('click', async (e) => {
-      const dest = [e.latlng.lat, e.latlng.lng];
-      setStatus('Routing to selected point…');
-      try {
-        if (!lastPosition) {
-          // try a quick locate
-          const res = await locateOnce(map);
-          if (res && res.position && res.position.coords) {
-            lastPosition = { latitude: res.position.coords.latitude, longitude: res.position.coords.longitude };
-          }
-        }
-        if (!lastPosition) throw new Error('Current position unknown');
-
-        // clear previous route/marker
-        if (currentRouteLayer) { map.removeLayer(currentRouteLayer); currentRouteLayer = null; }
-        if (destinationMarker) { map.removeLayer(destinationMarker); destinationMarker = null; }
-
-        const from = [lastPosition.latitude, lastPosition.longitude];
-        const r = await routeTo(map, from, dest);
-        currentRouteLayer = r.layer;
-        destinationMarker = L.marker(dest).addTo(map);
-        const distKm = (r.distance / 1000).toFixed(2);
-        const mins = Math.round(r.duration / 60);
-        destinationMarker.bindPopup(`Distance: ${distKm} km<br>ETA: ${mins} min`).openPopup();
-        setStatus(`Route shown — ${distKm} km, ~${mins} min.`);
-      } catch (err) {
-        setStatus('Routing failed: ' + (err && err.message ? err.message : 'unknown'));
-      }
-    });
-  };
-
-  // ensure click handler whenever map is created
-  const origCreateMap = createMap;
-  // If map was already created, attach handler now
-  if (map) ensureMapClick();
-  // Otherwise wrap createMap to attach after first create
-  // Note: we only wrap once
-  if (!createMap._wrapped) {
-    createMap._wrapped = true;
-    // This is a small runtime wrapper: when app calls createMap, we attach click handler
-    const createMapWrapper = (containerId) => {
-      const m = origCreateMap(containerId);
-      map = m;
       ensureMapClick();
-      return m;
-    };
-    // Replace local reference used in this module
-    // eslint-disable-next-line no-global-assign
-    // (we only use createMap from imported module in this file scope)
+    });
   }
 });
+
+function ensureMapClick() {
+  if (!map || mapClickRegistered) return;
+  map.on('click', async (e) => {
+    const to = e.latlng;
+    if (!lastKnownLatLng) {
+      setStatus('No known starting location — please tap "Center on me" first.');
+      return;
+    }
+    setStatus('Routing to destination...');
+    try {
+      // lazy import routeBetween to avoid circular issues
+      const { routeBetween } = await import('./map.js');
+      const result = await routeBetween(map, lastKnownLatLng, to);
+      const km = (result.distance / 1000).toFixed(2);
+      const mins = Math.round(result.duration / 60);
+      setStatus(`Route: ${km} km, ~${mins} min`);
+    } catch (err) {
+      setStatus('Routing failed: ' + (err && err.message ? err.message : 'unknown'));
+    }
+  });
+  mapClickRegistered = true;
+}
 
 function showMapUI() {
   const landing = document.getElementById('landing');

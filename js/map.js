@@ -122,26 +122,46 @@ export function watchPosition(map, onUpdate) {
   return () => navigator.geolocation.clearWatch(id);
 }
 
-// Route from `from` to `to` using OSRM public server. `from` and `to` are [lat, lon].
-// Returns an object: {layer, distance, duration, geometry}
-export async function routeTo(map, from, to) {
-  if (!from || !to) throw new Error('from and to required');
-  const [fLat, fLon] = from;
-  const [tLat, tLon] = to;
-  const url = `https://router.project-osrm.org/route/v1/driving/${fLon},${fLat};${tLon},${tLat}?overview=full&geometries=geojson&alternatives=false&steps=false`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error('Routing request failed');
-  const data = await res.json();
-  if (!data.routes || !data.routes.length) throw new Error('No route found');
+// Routing helpers (uses public OSRM demo server)
+let _currentRouteLayer = null;
+let _currentDestMarker = null;
+
+export async function routeBetween(map, fromLatLng, toLatLng) {
+  if (!map) throw new Error('Map required');
+  // fromLatLng and toLatLng are L.LatLng-like objects or [lat, lng]
+  const from = Array.isArray(fromLatLng) ? fromLatLng : [fromLatLng.lat, fromLatLng.lng];
+  const to = Array.isArray(toLatLng) ? toLatLng : [toLatLng.lat, toLatLng.lng];
+  const fromLonLat = `${from[1]},${from[0]}`;
+  const toLonLat = `${to[1]},${to[0]}`;
+  const url = `https://router.project-osrm.org/route/v1/driving/${fromLonLat};${toLonLat}?overview=full&geometries=geojson&alternatives=false&steps=false`;
+
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error('Routing service error');
+  const data = await resp.json();
+  if (!data || data.code !== 'Ok' || !data.routes || !data.routes.length) throw new Error('No route found');
   const route = data.routes[0];
-  const geo = route.geometry;
-  const layer = L.geoJSON(geo, {style: {color: '#007bff', weight: 5, opacity: 0.8}}).addTo(map);
-  // fit bounds
-  try {
-    const bounds = layer.getBounds();
-    if (bounds && bounds.isValid()) map.fitBounds(bounds, {padding: [50,50]});
-  } catch (e) {
-    // ignore
-  }
-  return {layer, distance: route.distance, duration: route.duration, geometry: geo};
+  const coords = route.geometry.coordinates.map(c => [c[1], c[0]]);
+
+  // clear previous
+  if (_currentRouteLayer) { try { map.removeLayer(_currentRouteLayer); } catch(e){} _currentRouteLayer = null; }
+  if (_currentDestMarker) { try { map.removeLayer(_currentDestMarker); } catch(e){} _currentDestMarker = null; }
+
+  _currentRouteLayer = L.polyline(coords, {color:'#1978c8', weight:5, opacity:0.9}).addTo(map);
+  _currentDestMarker = L.marker([to[0], to[1]]).addTo(map).bindPopup('Destination').openPopup();
+
+  const bounds = _currentRouteLayer.getBounds();
+  map.fitBounds(bounds, {padding:[40,40]});
+
+  return {
+    distance: route.distance, // meters
+    duration: route.duration, // seconds
+    geometry: coords,
+    layer: _currentRouteLayer,
+    destMarker: _currentDestMarker
+  };
+}
+
+export function clearRoute(map) {
+  if (_currentRouteLayer) { try { map.removeLayer(_currentRouteLayer); } catch(e){} _currentRouteLayer = null; }
+  if (_currentDestMarker) { try { map.removeLayer(_currentDestMarker); } catch(e){} _currentDestMarker = null; }
 }
