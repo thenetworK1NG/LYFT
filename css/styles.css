@@ -45,3 +45,9 @@ body { font-family: Arial, Helvetica, sans-serif; height:100vh; display:flex; fl
 /* Toast confirmation */
 .toast { position:fixed; left:50%; transform:translateX(-50%); bottom:20px; background:#323a45; color:#fff; padding:10px 14px; border-radius:10px; box-shadow:0 6px 20px rgba(0,0,0,0.18); z-index:2000; opacity:0; pointer-events:none; transition:opacity .2s ease, transform .2s ease }
 .toast.show { opacity:1; transform:translateX(-50%) translateY(-6px); pointer-events:auto }
+
+/* Floating action button for mobile request */
+.fab { position:fixed; right:14px; bottom:86px; z-index:1500; background:var(--primary); color:#fff; border:0; padding:12px 16px; border-radius:28px; box-shadow:0 8px 20px rgba(0,0,0,0.18); font-weight:700; font-size:1rem }
+.fab:active{transform:translateY(1px)}
+.fab.hidden{display:none !important}
+@media (min-width:701px){ .fab{display:none !important} }

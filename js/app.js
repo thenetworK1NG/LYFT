@@ -4,7 +4,6 @@ import { getDatabase, ref, push, set } from 'https://www.gstatic.com/firebasejs/
 
 const statusEl = document.getElementById('status');
 const locateBtn = document.getElementById('locateBtn');
-const bookBtn = document.getElementById('bookBtn');
 let map = null;
 let lastKnownLatLng = null;
 let mapClickRegistered = false;
@@ -37,7 +36,11 @@ async function sendLocationToFirebase(latlng) {
     });
     setStatus('Location saved to Firebase.');
     showToast('Ride request sent');
-    if (bookBtn) { bookBtn.disabled = true; bookBtn.textContent = 'Requested ✓'; }
+    // disable any request controls if present
+    const b = document.getElementById('bookBtn');
+    if (b) { b.disabled = true; b.textContent = 'Requested ✓'; }
+    const f = document.getElementById('fabRequest');
+    if (f) { f.disabled = true; f.textContent = 'Requested ✓'; }
   } catch (e) {
     console.error('Firebase write failed', e);
     setStatus('Failed to save location to Firebase.');
@@ -54,16 +57,24 @@ function showToast(msg, timeout = 2500){
     document.body.appendChild(t);
   }
   t.textContent = msg;
-  t.classList.add('show');
+  // ensure transition: add class on next frame
+  t.classList.remove('show');
   clearTimeout(t._h);
+  requestAnimationFrame(()=> requestAnimationFrame(()=> t.classList.add('show')));
   t._h = setTimeout(()=>{ t.classList.remove('show'); }, timeout);
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  // re-query dynamic controls to ensure they exist
+  const bookBtn = document.getElementById('bookBtn');
+  const fabBtn = document.getElementById('fabRequest');
+  // show/hide fab when map is shown
+  const showFab = () => { if (fabBtn) fabBtn.classList.remove('hidden'); };
+  const hideFab = () => { if (fabBtn) fabBtn.classList.add('hidden'); };
   // Landing flow: user clicks Book to show map and locate quickly.
   if (bookBtn) {
     bookBtn.addEventListener('click', async () => {
-      showMapUI();
+      showMapUI(); showFab();
       if (!map) {
         map = createMap('map');
         ensureMapClick();
@@ -85,6 +96,22 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // Floating FAB request (visible on mobile map view)
+  if (fabBtn) {
+    fabBtn.addEventListener('click', async () => {
+      // use last known or attempt to locate
+      if (!lastKnownLatLng) {
+        setStatus('Locating…');
+        try {
+          const res = await locateOnce(map || (map = createMap('map')));
+          if (res && res.marker) lastKnownLatLng = res.marker.getLatLng();
+          setStatus('Located you on the map.');
+        } catch (e) { setStatus('Location error'); }
+      }
+      if (lastKnownLatLng) await sendLocationToFirebase(lastKnownLatLng);
+    });
+  }
+
   if (locateBtn) {
     locateBtn.addEventListener('click', async () => {
       if (!map) {
@@ -92,6 +119,8 @@ document.addEventListener('DOMContentLoaded', () => {
         map = createMap('map');
         ensureMapClick();
         setTimeout(() => { if (map && typeof map.invalidateSize === 'function') map.invalidateSize(); }, 300);
+        // reveal FAB when map visible
+        const fb = document.getElementById('fabRequest'); if (fb) fb.classList.remove('hidden');
       }
       setStatus('Locating…');
       try {
@@ -190,6 +219,7 @@ function showMapUI() {
   if (topbar) topbar.classList.remove('hidden');
   if (mapEl) mapEl.classList.remove('hidden');
   if (status) status.classList.remove('hidden');
+  const fab = document.getElementById('fabRequest'); if (fab) fab.classList.remove('hidden');
 }
 
 function setStatus(msg) {
