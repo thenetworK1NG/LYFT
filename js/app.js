@@ -36,10 +36,27 @@ async function sendLocationToFirebase(latlng) {
       source: 'book_button'
     });
     setStatus('Location saved to Firebase.');
+    showToast('Ride request sent');
+    if (bookBtn) { bookBtn.disabled = true; bookBtn.textContent = 'Requested ✓'; }
   } catch (e) {
     console.error('Firebase write failed', e);
     setStatus('Failed to save location to Firebase.');
   }
+}
+
+// Simple toast for confirmations
+function showToast(msg, timeout = 2500){
+  let t = document.getElementById('__toast');
+  if (!t){
+    t = document.createElement('div');
+    t.id = '__toast';
+    t.className = 'toast';
+    document.body.appendChild(t);
+  }
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._h);
+  t._h = setTimeout(()=>{ t.classList.remove('show'); }, timeout);
 }
 
 document.addEventListener('DOMContentLoaded', () => {

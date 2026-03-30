@@ -41,3 +41,7 @@ body { font-family: Arial, Helvetica, sans-serif; height:100vh; display:flex; fl
 	#ridePanel { padding:12px }
 	#rideActions button { min-width:120px }
 }
+
+/* Toast confirmation */
+.toast { position:fixed; left:50%; transform:translateX(-50%); bottom:20px; background:#323a45; color:#fff; padding:10px 14px; border-radius:10px; box-shadow:0 6px 20px rgba(0,0,0,0.18); z-index:2000; opacity:0; pointer-events:none; transition:opacity .2s ease, transform .2s ease }
+.toast.show { opacity:1; transform:translateX(-50%) translateY(-6px); pointer-events:auto }
