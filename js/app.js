@@ -50,6 +50,8 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!map) {
         map = createMap('map');
         ensureMapClick();
+        // Allow the map container to become visible then refresh tiles
+        setTimeout(() => { if (map && typeof map.invalidateSize === 'function') map.invalidateSize(); }, 300);
       }
       setStatus('Locating…');
       try {
@@ -72,6 +74,7 @@ document.addEventListener('DOMContentLoaded', () => {
         showMapUI();
         map = createMap('map');
         ensureMapClick();
+        setTimeout(() => { if (map && typeof map.invalidateSize === 'function') map.invalidateSize(); }, 300);
       }
       setStatus('Locating…');
       try {
@@ -89,6 +92,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!map) {
         showMapUI();
         map = createMap('map');
+          setTimeout(() => { if (map && typeof map.invalidateSize === 'function') map.invalidateSize(); }, 300);
       }
       if (!stopWatch) {
         stopWatch = watchPosition(map, (obj) => {

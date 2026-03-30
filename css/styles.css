@@ -1,32 +1,43 @@
 /* css/styles.css */
-html,body { height:100%; margin:0; padding:0; }
-body { font-family: Arial, Helvetica, sans-serif; height:100vh; display:flex; flex-direction:column; }
-#topbar { display:flex; align-items:center; justify-content:space-between; padding:8px 12px; background:#fff; box-shadow:0 1px 2px rgba(0,0,0,0.08); z-index:1000; }
-#map { flex:1 1 auto; }
-#controls button { margin-left:8px; padding:6px 10px; }
-#status { padding:6px 12px; font-size:0.9rem; background:#f7f7f7; border-top:1px solid #eee; }
+#root { --bg: #ffffff; --muted: #666; --primary: #1978c8; --radius: 12px; }
+html,body { height:100%; margin:0; padding:0; -webkit-text-size-adjust:100%; }
+*,*::before,*::after{box-sizing:border-box}
+body { font-family: Arial, Helvetica, sans-serif; height:100vh; display:flex; flex-direction:column; font-size:16px; background:var(--bg); color:#111 }
+#topbar { display:flex; align-items:center; justify-content:space-between; padding:10px 14px; background:#fff; box-shadow:0 1px 4px rgba(0,0,0,0.08); z-index:1000; gap:8px; }
+#map { flex:1 1 auto; min-height:220px; width:100%; }
+#controls button { margin-left:8px; padding:8px 12px; border-radius:10px; font-size:1rem; background:var(--primary); color:#fff; border:0; }
+#controls button:active{transform:translateY(1px)}
+#status { padding:8px 12px; font-size:0.95rem; background:#f7f7f7; border-top:1px solid #eee; }
 
 /* Landing */
-#landing { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:40px; gap:12px; height:100vh; box-sizing:border-box; }
-#landing h1 { font-size:2rem; margin:0; }
-#landing p { margin:0; color:#666; }
-#landing button { padding:10px 16px; font-size:1rem; }
+#landing { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:40px 20px; gap:12px; height:100vh; box-sizing:border-box; text-align:center; }
+#landing h1 { font-size:1.6rem; margin:0; line-height:1.1 }
+#landing p { margin:0; color:var(--muted); max-width:420px }
+#landing button { padding:12px 18px; font-size:1.05rem; border-radius:12px; background:var(--primary); color:#fff; border:0; width:220px; }
+
+/* Make primary actions full-width on narrow screens */
+@media (max-width:420px){
+	#landing { padding:28px 16px }
+	#landing button { width:100% }
+}
 
 /* Utility */
 .hidden { display:none !important; }
 
 /* Mobile ride panel */
-#ridePanel { position:fixed; left:10px; right:10px; bottom:14px; background:linear-gradient(180deg,#fff,#f8fbff); border-radius:12px; box-shadow:0 6px 20px rgba(0,0,0,0.12); padding:12px; display:flex; align-items:center; justify-content:space-between; gap:12px; z-index:1200; }
+#ridePanel { position:fixed; left:12px; right:12px; bottom:calc(env(safe-area-inset-bottom, 0px) + 14px); background:linear-gradient(180deg,#fff,#f8fbff); border-radius:var(--radius); box-shadow:0 6px 20px rgba(0,0,0,0.12); padding:12px; display:flex; align-items:center; justify-content:space-between; gap:12px; z-index:1200; }
 #rideInfo { display:flex; flex-direction:column; }
 #rideDistance { font-weight:700; font-size:1.05rem; }
 #rideDuration { color:#555; font-size:0.95rem; }
-#rideActions button { margin-left:8px; padding:8px 12px; border-radius:8px; border:0; background:#1978c8; color:#fff; }
+#rideActions button { margin-left:8px; padding:10px 12px; border-radius:8px; border:0; background:var(--primary); color:#fff; min-width:88px }
 
 /* Hide the ride panel by default on larger screens; show on mobile */
 .mobile-only { display:none; }
 @media (max-width: 700px) {
 	.mobile-only { display:flex; }
 	#topbar { padding:10px; }
-	#topbar h1 { font-size:1.1rem; }
-	#controls button { padding:8px 10px; font-size:0.95rem; }
+	#topbar h1 { font-size:1.05rem; margin:0 }
+	#controls button { padding:10px 12px; font-size:1rem }
+	#ridePanel { padding:12px }
+	#rideActions button { min-width:120px }
 }
