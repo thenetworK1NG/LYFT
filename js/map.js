@@ -3,8 +3,11 @@ export function createMap(containerId) {
   const map = L.map(containerId, {zoomControl:true}).setView([0,0], 2);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
-    attribution: '&copy; OpenStreetMap contributors'
+    attribution: 'networKING Technology'
   }).addTo(map);
+  if (map && map.attributionControl && typeof map.attributionControl.setPrefix === 'function') {
+    map.attributionControl.setPrefix('');
+  }
   return map;
 }
 

@@ -1,6 +1,6 @@
 import {createMap, locateOnce, clearRoute} from './map.js';
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js';
-import { getDatabase, ref, push, set } from 'https://www.gstatic.com/firebasejs/9.22.1/firebase-database.js';
+import { getDatabase, ref, push, set, onValue, get } from 'https://www.gstatic.com/firebasejs/9.22.1/firebase-database.js';
 
 const statusEl = document.getElementById('status');
 const locateBtn = document.getElementById('locateBtn');
@@ -9,6 +9,9 @@ let lastKnownLatLng = null;
 let mapClickRegistered = false;
 let currentDestination = null;
 let currentRouteGeometry = null;
+let myRequestId = null;
+let myRequestUnsub = null;
+let myDriverUnsub = null;
 
 // Firebase config (Realtime Database)
 const firebaseConfig = {
@@ -36,6 +39,10 @@ async function sendLocationToFirebase(latlng) {
       timestamp: Date.now(),
       source: 'book_button'
     });
+    // remember our request id so we can listen for updates (accepted/completed)
+    myRequestId = newReq.key;
+    try{ localStorage.setItem('myRequestId', myRequestId); }catch(e){}
+    attachRequestListener(myRequestId);
     setStatus('Location saved to Firebase.');
     showToast('Ride request sent');
     // disable any request controls if present
@@ -211,6 +218,9 @@ function showRidePanel(km, mins) {
           timestamp: Date.now(),
           source: 'user_map_request'
         });
+        myRequestId = newReq.key;
+        try{ localStorage.setItem('myRequestId', myRequestId); }catch(e){}
+        attachRequestListener(myRequestId);
         showToast('Ride request sent');
         setStatus('Ride requested.');
         // disable the request button to prevent duplicate sends
@@ -229,6 +239,80 @@ function showRidePanel(km, mins) {
     };
   }
 }
+
+function distanceMeters(a, b){
+  if(!a || !b) return Infinity;
+  const toRad = d => d * Math.PI / 180;
+  const R = 6371e3;
+  const phi1 = toRad(a.lat), phi2 = toRad(b.lat);
+  const dphi = toRad(b.lat - a.lat), dlambda = toRad(b.lng - a.lng);
+  const x = Math.sin(dphi/2) * Math.sin(dphi/2) + Math.cos(phi1)*Math.cos(phi2)*Math.sin(dlambda/2)*Math.sin(dlambda/2);
+  const c = 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1-x));
+  return R * c;
+}
+
+function estimateMinutesFromMeters(m){
+  if (!isFinite(m)) return null;
+  const metersPerMin = 700; // ~42 km/h average
+  return Math.max(1, Math.round(m / metersPerMin));
+}
+
+function ensureRideStatusEl(){
+  let el = document.getElementById('rideStatus');
+  const panel = document.getElementById('ridePanel');
+  if (!panel) return null;
+  if (!el){
+    el = document.createElement('div'); el.id = 'rideStatus'; el.style.marginTop = '8px'; el.style.fontSize = '14px'; el.style.color = '#0b63d6';
+    panel.appendChild(el);
+  }
+  return el;
+}
+
+function attachRequestListener(requestId){
+  if (!requestId) return;
+  const rRef = ref(database, 'ride_requests/' + requestId);
+  // detach previous
+  try{ if (myRequestUnsub) myRequestUnsub(); }catch(e){}
+  myRequestUnsub = onValue(rRef, async (snap) => {
+    const data = snap.val();
+    const statusEl = ensureRideStatusEl();
+    if (!data) {
+      if (statusEl) statusEl.textContent = 'Request removed or completed.';
+      try{ localStorage.removeItem('myRequestId'); }catch(e){}
+      return;
+    }
+    if (data.status === 'completed'){
+      if (statusEl) statusEl.textContent = 'Your ride is complete.';
+      return;
+    }
+    if (data.acceptedBy) {
+      // show driver ETA — fetch driver location and subscribe to updates
+      const driverId = data.acceptedBy;
+      if (statusEl) statusEl.textContent = 'Driver assigned — calculating ETA…';
+      // detach previous driver listener
+      try{ if (myDriverUnsub) myDriverUnsub(); }catch(e){}
+      const dRef = ref(database, 'drivers/' + driverId);
+      myDriverUnsub = onValue(dRef, (dSnap) => {
+        const dv = dSnap.val() || {};
+        const driverPos = (typeof dv.lat === 'number' && typeof dv.lng === 'number') ? { lat: dv.lat, lng: dv.lng } : null;
+        // prefer pickup origin if available
+        const origin = data.origin ? { lat: data.origin.lat, lng: data.origin.lng } : (data.lat ? { lat: data.lat, lng: data.lng } : null);
+        if (driverPos && origin) {
+          const meters = distanceMeters(driverPos, origin);
+          const mins = estimateMinutesFromMeters(meters);
+          if (statusEl) statusEl.textContent = `Driver is on the way — ETA ~${mins} min`;
+        } else if (statusEl) {
+          statusEl.textContent = 'Driver is on the way';
+        }
+      });
+    } else {
+      if (statusEl) statusEl.textContent = 'Waiting for a driver to accept your request';
+    }
+  });
+}
+
+// attach listener on load if we have an outstanding request
+try{ const saved = localStorage.getItem('myRequestId'); if (saved) { myRequestId = saved; attachRequestListener(saved); } }catch(e){}
 
 function hideRidePanel() {
   const panel = document.getElementById('ridePanel');
