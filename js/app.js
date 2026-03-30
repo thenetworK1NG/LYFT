@@ -7,6 +7,8 @@ const locateBtn = document.getElementById('locateBtn');
 let map = null;
 let lastKnownLatLng = null;
 let mapClickRegistered = false;
+let currentDestination = null;
+let currentRouteGeometry = null;
 
 // Firebase config (Realtime Database)
 const firebaseConfig = {
@@ -57,10 +59,12 @@ function showToast(msg, timeout = 2500){
     document.body.appendChild(t);
   }
   t.textContent = msg;
-  // ensure transition: add class on next frame
+  // force a visible style immediately, then clean up after timeout
   t.classList.remove('show');
+  // force reflow so transition always triggers
+  void t.offsetWidth;
+  t.classList.add('show');
   clearTimeout(t._h);
-  requestAnimationFrame(()=> requestAnimationFrame(()=> t.classList.add('show')));
   t._h = setTimeout(()=>{ t.classList.remove('show'); }, timeout);
 }
 
@@ -86,10 +90,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const res = await locateOnce(map);
         if (res && res.marker) lastKnownLatLng = res.marker.getLatLng();
         setStatus('Located you on the map.');
-        if (lastKnownLatLng) {
-          // send the located coordinates to Firebase Realtime Database
-          await sendLocationToFirebase(lastKnownLatLng);
-        }
+        // Do NOT auto-send a ride request here. Wait until user taps destination.
       } catch (err) {
         setStatus('Location error: ' + (err && (err.message || err.code) ? (err.message || err.code) : 'unknown'));
       }
@@ -108,7 +109,7 @@ document.addEventListener('DOMContentLoaded', () => {
           setStatus('Located you on the map.');
         } catch (e) { setStatus('Location error'); }
       }
-      if (lastKnownLatLng) await sendLocationToFirebase(lastKnownLatLng);
+      // FAB now only recenters/locates; actual ride request is created after tapping destination.
     });
   }
 
@@ -170,6 +171,9 @@ function ensureMapClick() {
     try {
       const { routeBetween } = await import('./map.js');
       const result = await routeBetween(map, lastKnownLatLng, to);
+      // store destination and route geometry so the user can request based on the route
+      currentDestination = to;
+      currentRouteGeometry = result.geometry || null;
       const km = (result.distance / 1000).toFixed(2);
       const mins = Math.round(result.duration / 60);
       showRidePanel(km, mins);
@@ -191,9 +195,30 @@ function showRidePanel(km, mins) {
   if (panel) panel.classList.remove('hidden');
 
   if (requestBtn) {
-    requestBtn.onclick = () => {
-      setStatus('Ride requested — stub action.');
-      // TODO: wire to backend API
+    requestBtn.onclick = async () => {
+      if (!lastKnownLatLng || !currentDestination) {
+        setStatus('Missing origin or destination.');
+        return;
+      }
+      setStatus('Sending ride request…');
+      try {
+        const reqRef = ref(database, 'ride_requests');
+        const newReq = push(reqRef);
+        await set(newReq, {
+          origin: { lat: lastKnownLatLng.lat, lng: lastKnownLatLng.lng },
+          destination: { lat: currentDestination.lat, lng: currentDestination.lng },
+          geometry: currentRouteGeometry || null,
+          timestamp: Date.now(),
+          source: 'user_map_request'
+        });
+        showToast('Ride request sent');
+        setStatus('Ride requested.');
+        // disable the request button to prevent duplicate sends
+        requestBtn.disabled = true; requestBtn.textContent = 'Requested ✓';
+      } catch (e) {
+        console.error('Failed to send ride request', e);
+        setStatus('Failed to send request.');
+      }
     };
   }
   if (clearBtn) {
