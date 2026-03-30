@@ -1,4 +1,6 @@
 import {createMap, locateOnce, clearRoute} from './map.js';
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js';
+import { getDatabase, ref, push, set } from 'https://www.gstatic.com/firebasejs/9.22.1/firebase-database.js';
 
 const statusEl = document.getElementById('status');
 const locateBtn = document.getElementById('locateBtn');
@@ -6,6 +8,39 @@ const bookBtn = document.getElementById('bookBtn');
 let map = null;
 let lastKnownLatLng = null;
 let mapClickRegistered = false;
+
+// Firebase config (Realtime Database)
+const firebaseConfig = {
+  apiKey: "AIzaSyDOK9DF3u9JXzfi7PYExrCDQX09vNN_c3k",
+  authDomain: "uber-system-e73d6.firebaseapp.com",
+  projectId: "uber-system-e73d6",
+  storageBucket: "uber-system-e73d6.firebasestorage.app",
+  messagingSenderId: "482805503804",
+  appId: "1:482805503804:web:fa126da66cf3efcf45b039",
+  measurementId: "G-CC559WX63X",
+  databaseURL: "https://uber-system-e73d6-default-rtdb.firebaseio.com/"
+};
+
+const firebaseApp = initializeApp(firebaseConfig);
+const database = getDatabase(firebaseApp);
+
+async function sendLocationToFirebase(latlng) {
+  if (!latlng) return;
+  try {
+    const reqRef = ref(database, 'ride_requests');
+    const newReq = push(reqRef);
+    await set(newReq, {
+      lat: latlng.lat,
+      lng: latlng.lng,
+      timestamp: Date.now(),
+      source: 'book_button'
+    });
+    setStatus('Location saved to Firebase.');
+  } catch (e) {
+    console.error('Firebase write failed', e);
+    setStatus('Failed to save location to Firebase.');
+  }
+}
 
 document.addEventListener('DOMContentLoaded', () => {
   // Landing flow: user clicks Book to show map and locate quickly.
@@ -21,6 +56,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const res = await locateOnce(map);
         if (res && res.marker) lastKnownLatLng = res.marker.getLatLng();
         setStatus('Located you on the map.');
+        if (lastKnownLatLng) {
+          // send the located coordinates to Firebase Realtime Database
+          await sendLocationToFirebase(lastKnownLatLng);
+        }
       } catch (err) {
         setStatus('Location error: ' + (err && (err.message || err.code) ? (err.message || err.code) : 'unknown'));
       }
