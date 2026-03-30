@@ -27,6 +27,17 @@
 
   <div id="status" class="hidden" aria-live="polite"></div>
 
+  <div id="ridePanel" class="hidden mobile-only" role="region" aria-label="Ride details">
+    <div id="rideInfo">
+      <div id="rideDistance">— km</div>
+      <div id="rideDuration">— min</div>
+    </div>
+    <div id="rideActions">
+      <button id="requestBtn">Request ride</button>
+      <button id="clearRouteBtn">Clear</button>
+    </div>
+  </div>
+
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script type="module" src="js/app.js"></script>
 </body>

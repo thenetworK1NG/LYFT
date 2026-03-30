@@ -1,4 +1,4 @@
-import {createMap, locateOnce, watchPosition} from './map.js';
+import {createMap, locateOnce, watchPosition, clearRoute} from './map.js';
 
 const statusEl = document.getElementById('status');
 const locateBtn = document.getElementById('locateBtn');
@@ -87,12 +87,42 @@ function ensureMapClick() {
       const result = await routeBetween(map, lastKnownLatLng, to);
       const km = (result.distance / 1000).toFixed(2);
       const mins = Math.round(result.duration / 60);
-      setStatus(`Route: ${km} km, ~${mins} min`);
+      showRidePanel(km, mins);
     } catch (err) {
       setStatus('Routing failed: ' + (err && err.message ? err.message : 'unknown'));
     }
   });
   mapClickRegistered = true;
+}
+
+function showRidePanel(km, mins) {
+  const panel = document.getElementById('ridePanel');
+  const distEl = document.getElementById('rideDistance');
+  const durEl = document.getElementById('rideDuration');
+  const requestBtn = document.getElementById('requestBtn');
+  const clearBtn = document.getElementById('clearRouteBtn');
+  if (distEl) distEl.textContent = `${km} km`;
+  if (durEl) durEl.textContent = `~${mins} min`;
+  if (panel) panel.classList.remove('hidden');
+
+  if (requestBtn) {
+    requestBtn.onclick = () => {
+      setStatus('Ride requested — stub action.');
+      // TODO: wire to backend API
+    };
+  }
+  if (clearBtn) {
+    clearBtn.onclick = () => {
+      if (map) clearRoute(map);
+      hideRidePanel();
+      setStatus('Route cleared.');
+    };
+  }
+}
+
+function hideRidePanel() {
+  const panel = document.getElementById('ridePanel');
+  if (panel) panel.classList.add('hidden');
 }
 
 function showMapUI() {

@@ -14,3 +14,19 @@ body { font-family: Arial, Helvetica, sans-serif; height:100vh; display:flex; fl
 
 /* Utility */
 .hidden { display:none !important; }
+
+/* Mobile ride panel */
+#ridePanel { position:fixed; left:10px; right:10px; bottom:14px; background:linear-gradient(180deg,#fff,#f8fbff); border-radius:12px; box-shadow:0 6px 20px rgba(0,0,0,0.12); padding:12px; display:flex; align-items:center; justify-content:space-between; gap:12px; z-index:1200; }
+#rideInfo { display:flex; flex-direction:column; }
+#rideDistance { font-weight:700; font-size:1.05rem; }
+#rideDuration { color:#555; font-size:0.95rem; }
+#rideActions button { margin-left:8px; padding:8px 12px; border-radius:8px; border:0; background:#1978c8; color:#fff; }
+
+/* Hide the ride panel by default on larger screens; show on mobile */
+.mobile-only { display:none; }
+@media (max-width: 700px) {
+	.mobile-only { display:flex; }
+	#topbar { padding:10px; }
+	#topbar h1 { font-size:1.1rem; }
+	#controls button { padding:8px 10px; font-size:0.95rem; }
+}
