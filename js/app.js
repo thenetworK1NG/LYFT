@@ -1,10 +1,8 @@
-import {createMap, locateOnce, watchPosition, clearRoute} from './map.js';
+import {createMap, locateOnce, clearRoute} from './map.js';
 
 const statusEl = document.getElementById('status');
 const locateBtn = document.getElementById('locateBtn');
-const trackBtn = document.getElementById('trackBtn');
 const bookBtn = document.getElementById('bookBtn');
-let stopWatch = null;
 let map = null;
 let lastKnownLatLng = null;
 let mapClickRegistered = false;
@@ -14,27 +12,9 @@ document.addEventListener('DOMContentLoaded', () => {
   if (bookBtn) {
     bookBtn.addEventListener('click', async () => {
       showMapUI();
-      if (!map) map = createMap('map');
-      setStatus('Locating…');
-      try {
-        const res = await locateOnce(map);
-        // store last known latlng (marker from locateOnce)
-        if (res && res.marker) {
-          lastKnownLatLng = res.marker.getLatLng();
-        }
-        setStatus('Located you on the map.');
-      } catch (err) {
-        setStatus('Location error: ' + (err && (err.message || err.code) ? (err.message || err.code) : 'unknown'));
-      }
-      ensureMapClick();
-    });
-  }
-
-  if (locateBtn) {
-    locateBtn.addEventListener('click', async () => {
       if (!map) {
-        showMapUI();
         map = createMap('map');
+        ensureMapClick();
       }
       setStatus('Locating…');
       try {
@@ -44,7 +24,24 @@ document.addEventListener('DOMContentLoaded', () => {
       } catch (err) {
         setStatus('Location error: ' + (err && (err.message || err.code) ? (err.message || err.code) : 'unknown'));
       }
-      ensureMapClick();
+    });
+  }
+
+  if (locateBtn) {
+    locateBtn.addEventListener('click', async () => {
+      if (!map) {
+        showMapUI();
+        map = createMap('map');
+        ensureMapClick();
+      }
+      setStatus('Locating…');
+      try {
+        const res = await locateOnce(map);
+        if (res && res.marker) lastKnownLatLng = res.marker.getLatLng();
+        setStatus('Located you on the map.');
+      } catch (err) {
+        setStatus('Location error: ' + (err && (err.message || err.code) ? (err.message || err.code) : 'unknown'));
+      }
     });
   }
 
@@ -82,7 +79,6 @@ function ensureMapClick() {
     }
     setStatus('Routing to destination...');
     try {
-      // lazy import routeBetween to avoid circular issues
       const { routeBetween } = await import('./map.js');
       const result = await routeBetween(map, lastKnownLatLng, to);
       const km = (result.distance / 1000).toFixed(2);
