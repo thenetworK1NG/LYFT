@@ -48,7 +48,6 @@ function showToast(msg, timeout = 2500){
 document.addEventListener('DOMContentLoaded', () => {
   const bookBtn = document.getElementById('bookBtn');
 
-  // Landing flow: user clicks "Find my location" to show map
   if (bookBtn) {
     bookBtn.addEventListener('click', async () => {
       showMapUI();
@@ -61,7 +60,7 @@ document.addEventListener('DOMContentLoaded', () => {
       try {
         const res = await locateOnce(map);
         if (res && res.marker) lastKnownLatLng = res.marker.getLatLng();
-        setStatus('Located you on the map. Tap the map to choose a destination.');
+        setStatus('Tap the map to choose your destination');
       } catch (err) {
         setStatus('Location error: ' + (err && (err.message || err.code) ? (err.message || err.code) : 'unknown'));
       }
@@ -80,7 +79,7 @@ document.addEventListener('DOMContentLoaded', () => {
       try {
         const res = await locateOnce(map);
         if (res && res.marker) lastKnownLatLng = res.marker.getLatLng();
-        setStatus('Located you on the map.');
+        setStatus('Location updated');
       } catch (err) {
         setStatus('Location error: ' + (err && (err.message || err.code) ? (err.message || err.code) : 'unknown'));
       }
@@ -93,11 +92,10 @@ function ensureMapClick() {
   map.on('click', async (e) => {
     const to = e.latlng;
     if (!lastKnownLatLng) {
-      setStatus('No known starting location — please tap "Center on me" first.');
+      setStatus('Tap the locate button first');
       return;
     }
-    setStatus('Routing to destination…');
-    // Hide the hint banner once the user taps
+    setStatus('Routing…');
     const hint = document.getElementById('mapHint');
     if (hint) hint.classList.add('hidden');
     try {
@@ -105,12 +103,12 @@ function ensureMapClick() {
       const result = await routeBetween(map, lastKnownLatLng, to);
       currentDestination = to;
       currentRouteGeometry = result.geometry || null;
-      const km = (result.distance / 1000).toFixed(2);
+      const km = (result.distance / 1000).toFixed(1);
       const mins = Math.round(result.duration / 60);
       showRidePanel(km, mins);
-      setStatus(`Route: ${km} km · ~${mins} min`);
+      setStatus(`${km} km · ~${mins} min`);
     } catch (err) {
-      setStatus('Routing failed: ' + (err && err.message ? err.message : 'unknown'));
+      setStatus('Routing failed');
     }
   });
   mapClickRegistered = true;
@@ -122,17 +120,17 @@ function showRidePanel(km, mins) {
   const durEl = document.getElementById('rideDuration');
   const requestBtn = document.getElementById('requestBtn');
   const clearBtn = document.getElementById('clearRouteBtn');
-  if (distEl) distEl.textContent = `${km} km`;
-  if (durEl) durEl.textContent = `~${mins} min`;
+  if (distEl) distEl.textContent = km;
+  if (durEl) durEl.textContent = `~${mins}`;
   if (panel) panel.classList.remove('hidden');
 
   if (requestBtn) {
     requestBtn.onclick = async () => {
       if (!lastKnownLatLng || !currentDestination) {
-        setStatus('Missing origin or destination.');
+        setStatus('Missing origin or destination');
         return;
       }
-      setStatus('Sending ride request…');
+      setStatus('Sending request…');
       try {
         const reqRef = ref(database, 'ride_requests');
         const newReq = push(reqRef);
@@ -146,13 +144,13 @@ function showRidePanel(km, mins) {
         myRequestId = newReq.key;
         try{ localStorage.setItem('myRequestId', myRequestId); }catch(e){}
         attachRequestListener(myRequestId);
-        showToast('Ride request sent');
-        setStatus('Ride requested.');
-        // disable the request button to prevent duplicate sends
-        requestBtn.disabled = true; requestBtn.textContent = 'Requested ✓';
+        showToast('Ride requested!');
+        setStatus('Looking for a driver…');
+        requestBtn.disabled = true;
+        requestBtn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Requested';
       } catch (e) {
         console.error('Failed to send ride request', e);
-        setStatus('Failed to send request.');
+        setStatus('Failed to send request');
       }
     };
   }
@@ -160,7 +158,10 @@ function showRidePanel(km, mins) {
     clearBtn.onclick = () => {
       if (map) clearRoute(map);
       hideRidePanel();
-      setStatus('Route cleared.');
+      setStatus('Route cleared');
+      // Show hint again
+      const hint = document.getElementById('mapHint');
+      if (hint) hint.classList.remove('hidden');
     };
   }
 }
@@ -178,69 +179,56 @@ function distanceMeters(a, b){
 
 function estimateMinutesFromMeters(m){
   if (!isFinite(m)) return null;
-  const metersPerMin = 700; // ~42 km/h average
+  const metersPerMin = 700;
   return Math.max(1, Math.round(m / metersPerMin));
 }
 
-function ensureRideStatusEl(){
-  let el = document.getElementById('rideStatus');
-  const panel = document.getElementById('ridePanel');
-  if (!panel) return null;
-  if (!el){
-    el = document.createElement('div'); el.id = 'rideStatus'; el.style.marginTop = '8px'; el.style.fontSize = '14px'; el.style.color = '#0b63d6';
-    panel.appendChild(el);
-  }
-  return el;
+function updateRideStatus(text) {
+  const el = document.getElementById('rideStatus');
+  if (el) el.textContent = text || '';
 }
 
 function attachRequestListener(requestId){
   if (!requestId) return;
   const rRef = ref(database, 'ride_requests/' + requestId);
-  // detach previous
   try{ if (myRequestUnsub) myRequestUnsub(); }catch(e){}
   myRequestUnsub = onValue(rRef, async (snap) => {
     const data = snap.val();
-    const statusEl = ensureRideStatusEl();
     if (!data) {
-      // request removed (likely completed by driver) — clear UI immediately
       try{ localStorage.removeItem('myRequestId'); }catch(e){}
       try{ if (myDriverUnsub) myDriverUnsub(); }catch(e){}
-      // remove status element if present
-      const rs = document.getElementById('rideStatus'); if (rs) rs.remove();
+      updateRideStatus('');
       hideRidePanel();
-      showToast('Ride completed');
+      showToast('Ride completed!');
       return;
     }
     if (data.status === 'completed'){
       try{ localStorage.removeItem('myRequestId'); }catch(e){}
       try{ if (myDriverUnsub) myDriverUnsub(); }catch(e){}
-      const rs = document.getElementById('rideStatus'); if (rs) rs.remove();
+      updateRideStatus('');
       hideRidePanel();
-      showToast('Ride completed');
+      showToast('Ride completed!');
       return;
     }
     if (data.acceptedBy) {
-      // show driver ETA — fetch driver location and subscribe to updates
       const driverId = data.acceptedBy;
-      if (statusEl) statusEl.textContent = 'Driver assigned — calculating ETA…';
-      // detach previous driver listener
+      updateRideStatus('Driver on the way…');
       try{ if (myDriverUnsub) myDriverUnsub(); }catch(e){}
       const dRef = ref(database, 'drivers/' + driverId);
       myDriverUnsub = onValue(dRef, (dSnap) => {
         const dv = dSnap.val() || {};
         const driverPos = (typeof dv.lat === 'number' && typeof dv.lng === 'number') ? { lat: dv.lat, lng: dv.lng } : null;
-        // prefer pickup origin if available
         const origin = data.origin ? { lat: data.origin.lat, lng: data.origin.lng } : (data.lat ? { lat: data.lat, lng: data.lng } : null);
         if (driverPos && origin) {
           const meters = distanceMeters(driverPos, origin);
           const mins = estimateMinutesFromMeters(meters);
-          if (statusEl) statusEl.textContent = `Driver is on the way — ETA ~${mins} min`;
-        } else if (statusEl) {
-          statusEl.textContent = 'Driver is on the way';
+          updateRideStatus(`Driver arriving in ~${mins} min`);
+        } else {
+          updateRideStatus('Driver on the way');
         }
       });
     } else {
-      if (statusEl) statusEl.textContent = 'Waiting for a driver to accept your request';
+      updateRideStatus('Searching for a driver…');
     }
   });
 }
@@ -255,15 +243,15 @@ function hideRidePanel() {
 
 function showMapUI() {
   const landing = document.getElementById('landing');
-  const topbar = document.getElementById('topbar');
   const mapEl = document.getElementById('map');
   const status = document.getElementById('status');
   const hint = document.getElementById('mapHint');
+  const locBtn = document.getElementById('locateBtn');
   if (landing) landing.classList.add('hidden');
-  if (topbar) topbar.classList.remove('hidden');
   if (hint) hint.classList.remove('hidden');
   if (mapEl) mapEl.classList.remove('hidden');
   if (status) status.classList.remove('hidden');
+  if (locBtn) locBtn.classList.remove('hidden');
 }
 
 function setStatus(msg) {
