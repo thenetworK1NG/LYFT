@@ -28,34 +28,6 @@ const firebaseConfig = {
 const firebaseApp = initializeApp(firebaseConfig);
 const database = getDatabase(firebaseApp);
 
-async function sendLocationToFirebase(latlng) {
-  if (!latlng) return;
-  try {
-    const reqRef = ref(database, 'ride_requests');
-    const newReq = push(reqRef);
-    await set(newReq, {
-      lat: latlng.lat,
-      lng: latlng.lng,
-      timestamp: Date.now(),
-      source: 'book_button'
-    });
-    // remember our request id so we can listen for updates (accepted/completed)
-    myRequestId = newReq.key;
-    try{ localStorage.setItem('myRequestId', myRequestId); }catch(e){}
-    attachRequestListener(myRequestId);
-    setStatus('Location saved to Firebase.');
-    showToast('Ride request sent');
-    // disable any request controls if present
-    const b = document.getElementById('bookBtn');
-    if (b) { b.disabled = true; b.textContent = 'Requested ✓'; }
-    const f = document.getElementById('fabRequest');
-    if (f) { f.disabled = true; f.textContent = 'Requested ✓'; }
-  } catch (e) {
-    console.error('Firebase write failed', e);
-    setStatus('Failed to save location to Firebase.');
-  }
-}
-
 // Simple toast for confirmations
 function showToast(msg, timeout = 2500){
   let t = document.getElementById('__toast');
@@ -66,9 +38,7 @@ function showToast(msg, timeout = 2500){
     document.body.appendChild(t);
   }
   t.textContent = msg;
-  // force a visible style immediately, then clean up after timeout
   t.classList.remove('show');
-  // force reflow so transition always triggers
   void t.offsetWidth;
   t.classList.add('show');
   clearTimeout(t._h);
@@ -76,47 +46,25 @@ function showToast(msg, timeout = 2500){
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  // re-query dynamic controls to ensure they exist
   const bookBtn = document.getElementById('bookBtn');
-  const fabBtn = document.getElementById('fabRequest');
-  // show/hide fab when map is shown
-  const showFab = () => { if (fabBtn) fabBtn.classList.remove('hidden'); };
-  const hideFab = () => { if (fabBtn) fabBtn.classList.add('hidden'); };
-  // Landing flow: user clicks Book to show map and locate quickly.
+
+  // Landing flow: user clicks "Find my location" to show map
   if (bookBtn) {
     bookBtn.addEventListener('click', async () => {
-      showMapUI(); showFab();
+      showMapUI();
       if (!map) {
         map = createMap('map');
         ensureMapClick();
-        // Allow the map container to become visible then refresh tiles
         setTimeout(() => { if (map && typeof map.invalidateSize === 'function') map.invalidateSize(); }, 300);
       }
       setStatus('Locating…');
       try {
         const res = await locateOnce(map);
         if (res && res.marker) lastKnownLatLng = res.marker.getLatLng();
-        setStatus('Located you on the map.');
-        // Do NOT auto-send a ride request here. Wait until user taps destination.
+        setStatus('Located you on the map. Tap the map to choose a destination.');
       } catch (err) {
         setStatus('Location error: ' + (err && (err.message || err.code) ? (err.message || err.code) : 'unknown'));
       }
-    });
-  }
-
-  // Floating FAB request (visible on mobile map view)
-  if (fabBtn) {
-    fabBtn.addEventListener('click', async () => {
-      // use last known or attempt to locate
-      if (!lastKnownLatLng) {
-        setStatus('Locating…');
-        try {
-          const res = await locateOnce(map || (map = createMap('map')));
-          if (res && res.marker) lastKnownLatLng = res.marker.getLatLng();
-          setStatus('Located you on the map.');
-        } catch (e) { setStatus('Location error'); }
-      }
-      // FAB now only recenters/locates; actual ride request is created after tapping destination.
     });
   }
 
@@ -127,8 +75,6 @@ document.addEventListener('DOMContentLoaded', () => {
         map = createMap('map');
         ensureMapClick();
         setTimeout(() => { if (map && typeof map.invalidateSize === 'function') map.invalidateSize(); }, 300);
-        // reveal FAB when map visible
-        const fb = document.getElementById('fabRequest'); if (fb) fb.classList.remove('hidden');
       }
       setStatus('Locating…');
       try {
@@ -138,30 +84,6 @@ document.addEventListener('DOMContentLoaded', () => {
       } catch (err) {
         setStatus('Location error: ' + (err && (err.message || err.code) ? (err.message || err.code) : 'unknown'));
       }
-    });
-  }
-
-  if (trackBtn) {
-    trackBtn.addEventListener('click', () => {
-      if (!map) {
-        showMapUI();
-        map = createMap('map');
-          setTimeout(() => { if (map && typeof map.invalidateSize === 'function') map.invalidateSize(); }, 300);
-      }
-      if (!stopWatch) {
-        stopWatch = watchPosition(map, (obj) => {
-          if (obj && obj.marker) lastKnownLatLng = obj.marker.getLatLng();
-          setStatus('Tracking location (click to stop).');
-        });
-        trackBtn.textContent = 'Stop tracking';
-        setStatus('Tracking started.');
-      } else {
-        stopWatch();
-        stopWatch = null;
-        trackBtn.textContent = 'Start tracking';
-        setStatus('Tracking stopped.');
-      }
-      ensureMapClick();
     });
   }
 });
@@ -174,16 +96,19 @@ function ensureMapClick() {
       setStatus('No known starting location — please tap "Center on me" first.');
       return;
     }
-    setStatus('Routing to destination...');
+    setStatus('Routing to destination…');
+    // Hide the hint banner once the user taps
+    const hint = document.getElementById('mapHint');
+    if (hint) hint.classList.add('hidden');
     try {
       const { routeBetween } = await import('./map.js');
       const result = await routeBetween(map, lastKnownLatLng, to);
-      // store destination and route geometry so the user can request based on the route
       currentDestination = to;
       currentRouteGeometry = result.geometry || null;
       const km = (result.distance / 1000).toFixed(2);
       const mins = Math.round(result.duration / 60);
       showRidePanel(km, mins);
+      setStatus(`Route: ${km} km · ~${mins} min`);
     } catch (err) {
       setStatus('Routing failed: ' + (err && err.message ? err.message : 'unknown'));
     }
@@ -333,11 +258,12 @@ function showMapUI() {
   const topbar = document.getElementById('topbar');
   const mapEl = document.getElementById('map');
   const status = document.getElementById('status');
+  const hint = document.getElementById('mapHint');
   if (landing) landing.classList.add('hidden');
   if (topbar) topbar.classList.remove('hidden');
+  if (hint) hint.classList.remove('hidden');
   if (mapEl) mapEl.classList.remove('hidden');
   if (status) status.classList.remove('hidden');
-  const fab = document.getElementById('fabRequest'); if (fab) fab.classList.remove('hidden');
 }
 
 function setStatus(msg) {
