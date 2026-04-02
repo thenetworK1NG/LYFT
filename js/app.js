@@ -107,7 +107,13 @@ function isNightTime(){
 function calculatePrice(passengers){
   const defaults = { normalDay: 20, normalNight: 30, hikeDay: 35, hikeNight: 50 };
   const p = pricing || defaults;
-  const inHike = lastKnownLatLng ? isInHikeZone(lastKnownLatLng) : false;
+  // Hike zone applies if pickup OR any stop/destination is inside a hike zone
+  let inHike = lastKnownLatLng ? isInHikeZone(lastKnownLatLng) : false;
+  if (!inHike && stops.length) {
+    for (const s of stops) {
+      if (isInHikeZone(s)) { inHike = true; break; }
+    }
+  }
   const night = isNightTime();
   let pp;
   if (inHike) {
