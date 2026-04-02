@@ -55,6 +55,13 @@ function isInsideGeofence(latLng){
   return dist <= geofence.radiusKm;
 }
 
+function isTripWithinLimit(origin, destination){
+  if (!geofence || !geofence.enabled) return true;
+  if (typeof geofence.maxTripKm !== 'number') return true; // no limit set
+  const dist = haversineKm(origin, destination);
+  return dist <= geofence.maxTripKm;
+}
+
 // ===== Account management =====
 function sanitize(str){ return String(str).trim().replace(/[<>"'&]/g, ''); }
 
@@ -287,6 +294,13 @@ function showRidePanel(km, mins) {
       if (!isInsideGeofence(lastKnownLatLng)) {
         showToast('Mzala isn\u2019t available in your area yet');
         setStatus('You\u2019re outside the service zone. Move closer and try again.');
+        return;
+      }
+      // Max trip distance check
+      if (!isTripWithinLimit(lastKnownLatLng, currentDestination)) {
+        const maxKm = geofence && geofence.maxTripKm ? geofence.maxTripKm : '?';
+        showToast('That destination is too far');
+        setStatus(`Max trip distance is ${maxKm} km. Choose a closer destination.`);
         return;
       }
       setStatus('Sending ride request…');
