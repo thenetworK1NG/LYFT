@@ -1,6 +1,7 @@
 import {createMap, locateOnce, clearRoute} from './map.js';
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js';
 import { getDatabase, ref, push, set, onValue, get, query, orderByChild, equalTo } from 'https://www.gstatic.com/firebasejs/9.22.1/firebase-database.js';
+import { initGeofence, checkPoint, checkRoute } from '../../GEOFENCE/js/geofence-check.js';
 
 const statusEl = document.getElementById('status');
 const locateBtn = document.getElementById('locateBtn');
@@ -30,6 +31,9 @@ const firebaseConfig = {
 
 const firebaseApp = initializeApp(firebaseConfig);
 const database = getDatabase(firebaseApp);
+
+// Init geofence checker
+initGeofence(database);
 
 // ===== Account management =====
 function sanitize(str){ return String(str).trim().replace(/[<>"'&]/g, ''); }
@@ -219,6 +223,18 @@ function ensureMapClick() {
       setStatus('No known starting location — please tap "Center on me" first.');
       return;
     }
+
+    // ---- Geofence check on both origin and destination ----
+    const fenceResult = checkRoute(
+      { lat: lastKnownLatLng.lat, lng: lastKnownLatLng.lng },
+      { lat: to.lat, lng: to.lng }
+    );
+    if (!fenceResult.allowed) {
+      setStatus(fenceResult.reason);
+      showToast(fenceResult.reason);
+      return;
+    }
+
     setStatus('Routing to destination…');
     // Hide the hint banner once the user taps
     const hint = document.getElementById('mapHint');
@@ -257,6 +273,16 @@ function showRidePanel(km, mins) {
       }
       if (!lastKnownLatLng || !currentDestination) {
         setStatus('Missing origin or destination.');
+        return;
+      }
+      // Final geofence check before submit
+      const geoCheck = checkRoute(
+        { lat: lastKnownLatLng.lat, lng: lastKnownLatLng.lng },
+        { lat: currentDestination.lat, lng: currentDestination.lng }
+      );
+      if (!geoCheck.allowed) {
+        setStatus(geoCheck.reason);
+        showToast(geoCheck.reason);
         return;
       }
       setStatus('Sending ride request…');
