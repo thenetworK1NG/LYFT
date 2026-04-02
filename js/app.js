@@ -1,7 +1,6 @@
 import {createMap, locateOnce, clearRoute} from './map.js';
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js';
 import { getDatabase, ref, push, set, onValue, get, query, orderByChild, equalTo } from 'https://www.gstatic.com/firebasejs/9.22.1/firebase-database.js';
-import { initGeofence, checkPoint, checkRoute } from '../../GEOFENCE/js/geofence-check.js';
 
 const statusEl = document.getElementById('status');
 const locateBtn = document.getElementById('locateBtn');
@@ -16,6 +15,9 @@ let myDriverUnsub = null;
 
 // Current rider account (persisted in localStorage + Firebase)
 let riderAccount = null; // { id, username, phone }
+
+// Geofence (loaded from Firebase settings/geofence)
+let geofence = null; // { enabled, lat, lng, radiusKm }
 
 // Firebase config (Realtime Database)
 const firebaseConfig = {
@@ -32,8 +34,26 @@ const firebaseConfig = {
 const firebaseApp = initializeApp(firebaseConfig);
 const database = getDatabase(firebaseApp);
 
-// Init geofence checker
-initGeofence(database);
+// Listen for geofence config changes
+onValue(ref(database, 'settings/geofence'), (snap) => {
+  geofence = snap.val() || null;
+});
+
+function haversineKm(a, b){
+  const toRad = d => d * Math.PI / 180;
+  const R = 6371; // km
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const x = Math.sin(dLat/2)**2 + Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*Math.sin(dLng/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+}
+
+function isInsideGeofence(latLng){
+  if (!geofence || !geofence.enabled) return true; // no fence or fence off = allow
+  if (typeof geofence.lat !== 'number' || typeof geofence.lng !== 'number') return true;
+  const dist = haversineKm(latLng, { lat: geofence.lat, lng: geofence.lng });
+  return dist <= geofence.radiusKm;
+}
 
 // ===== Account management =====
 function sanitize(str){ return String(str).trim().replace(/[<>"'&]/g, ''); }
@@ -223,18 +243,6 @@ function ensureMapClick() {
       setStatus('No known starting location — please tap "Center on me" first.');
       return;
     }
-
-    // ---- Geofence check on both origin and destination ----
-    const fenceResult = checkRoute(
-      { lat: lastKnownLatLng.lat, lng: lastKnownLatLng.lng },
-      { lat: to.lat, lng: to.lng }
-    );
-    if (!fenceResult.allowed) {
-      setStatus(fenceResult.reason);
-      showToast(fenceResult.reason);
-      return;
-    }
-
     setStatus('Routing to destination…');
     // Hide the hint banner once the user taps
     const hint = document.getElementById('mapHint');
@@ -275,14 +283,10 @@ function showRidePanel(km, mins) {
         setStatus('Missing origin or destination.');
         return;
       }
-      // Final geofence check before submit
-      const geoCheck = checkRoute(
-        { lat: lastKnownLatLng.lat, lng: lastKnownLatLng.lng },
-        { lat: currentDestination.lat, lng: currentDestination.lng }
-      );
-      if (!geoCheck.allowed) {
-        setStatus(geoCheck.reason);
-        showToast(geoCheck.reason);
+      // Geofence check
+      if (!isInsideGeofence(lastKnownLatLng)) {
+        showToast('Mzala isn\u2019t available in your area yet');
+        setStatus('You\u2019re outside the service zone. Move closer and try again.');
         return;
       }
       setStatus('Sending ride request…');
