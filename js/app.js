@@ -7,19 +7,31 @@ const locateBtn = document.getElementById('locateBtn');
 let map = null;
 let lastKnownLatLng = null;
 let mapClickRegistered = false;
-let currentDestination = null;
-let currentRouteGeometry = null;
 let myRequestId = null;
 let myRequestUnsub = null;
 let myDriverUnsub = null;
 
+// Multi-stop booking state
+let stops = [];              // array of { lat, lng }
+let currentRouteGeometry = null;
+let totalDistanceM = 0;
+let totalDurationS = 0;
+let selectedPassengers = 1;
+let addingStop = false;      // true when user is picking a new stop on map
+
 // Current rider account (persisted in localStorage + Firebase)
-let riderAccount = null; // { id, username, phone }
+let riderAccount = null;
 
 // Geofence (loaded from Firebase settings/geofence)
-let geofence = null; // { enabled, lat, lng, radiusKm }
+let geofence = null;
 
-// Firebase config (Realtime Database)
+// Pricing (loaded from Firebase settings/pricing)
+let pricing = null; // { normalDay, normalNight, hikeDay, hikeNight, nightStartHour }
+
+// Hike zones (loaded from Firebase settings/hikeZones)
+let hikeZones = null; // { key: { lat, lng, radiusKm }, ... }
+
+// Firebase config
 const firebaseConfig = {
   apiKey: "AIzaSyDOK9DF3u9JXzfi7PYExrCDQX09vNN_c3k",
   authDomain: "uber-system-e73d6.firebaseapp.com",
@@ -39,9 +51,19 @@ onValue(ref(database, 'settings/geofence'), (snap) => {
   geofence = snap.val() || null;
 });
 
+// Listen for pricing config
+onValue(ref(database, 'settings/pricing'), (snap) => {
+  pricing = snap.val() || null;
+});
+
+// Listen for hike zones
+onValue(ref(database, 'settings/hikeZones'), (snap) => {
+  hikeZones = snap.val() || null;
+});
+
 function haversineKm(a, b){
   const toRad = d => d * Math.PI / 180;
-  const R = 6371; // km
+  const R = 6371;
   const dLat = toRad(b.lat - a.lat);
   const dLng = toRad(b.lng - a.lng);
   const x = Math.sin(dLat/2)**2 + Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*Math.sin(dLng/2)**2;
@@ -49,7 +71,7 @@ function haversineKm(a, b){
 }
 
 function isInsideGeofence(latLng){
-  if (!geofence || !geofence.enabled) return true; // no fence or fence off = allow
+  if (!geofence || !geofence.enabled) return true;
   if (typeof geofence.lat !== 'number' || typeof geofence.lng !== 'number') return true;
   const dist = haversineKm(latLng, { lat: geofence.lat, lng: geofence.lng });
   return dist <= geofence.radiusKm;
@@ -57,9 +79,43 @@ function isInsideGeofence(latLng){
 
 function isTripWithinLimit(origin, destination){
   if (!geofence || !geofence.enabled) return true;
-  if (typeof geofence.maxTripKm !== 'number') return true; // no limit set
+  if (typeof geofence.maxTripKm !== 'number') return true;
   const dist = haversineKm(origin, destination);
   return dist <= geofence.maxTripKm;
+}
+
+// Check if a point is inside any hike zone
+function isInHikeZone(latLng){
+  if (!hikeZones) return false;
+  const zones = Object.values(hikeZones);
+  for (const z of zones) {
+    if (typeof z.lat !== 'number' || typeof z.lng !== 'number') continue;
+    const dist = haversineKm(latLng, { lat: z.lat, lng: z.lng });
+    if (dist <= (z.radiusKm || 5)) return true;
+  }
+  return false;
+}
+
+// Determine if it's nighttime
+function isNightTime(){
+  const hour = new Date().getHours();
+  const nightStart = (pricing && typeof pricing.nightStartHour === 'number') ? pricing.nightStartHour : 22;
+  return hour >= nightStart || hour < 6;
+}
+
+// Calculate price per person and total
+function calculatePrice(passengers){
+  const defaults = { normalDay: 20, normalNight: 30, hikeDay: 35, hikeNight: 50 };
+  const p = pricing || defaults;
+  const inHike = lastKnownLatLng ? isInHikeZone(lastKnownLatLng) : false;
+  const night = isNightTime();
+  let pp;
+  if (inHike) {
+    pp = night ? (p.hikeNight || defaults.hikeNight) : (p.hikeDay || defaults.hikeDay);
+  } else {
+    pp = night ? (p.normalNight || defaults.normalNight) : (p.normalDay || defaults.normalDay);
+  }
+  return { pricePerPerson: pp, total: pp * passengers, isHikeZone: inHike, isNight: night };
 }
 
 // ===== Account management =====
@@ -68,7 +124,6 @@ function sanitize(str){ return String(str).trim().replace(/[<>"'&]/g, ''); }
 async function isPhoneTaken(phone, excludeId){
   const snap = await get(query(ref(database, 'riders'), orderByChild('phone'), equalTo(phone)));
   if (!snap.exists()) return false;
-  // allow if same user
   let taken = false;
   snap.forEach(child => { if (child.key !== excludeId) taken = true; });
   return taken;
@@ -79,7 +134,6 @@ async function createAccount(username, phone){
   phone = sanitize(phone);
   if (!username || username.length < 2) throw new Error('Username must be at least 2 characters');
   if (!phone || phone.length < 7) throw new Error('Enter a valid phone number');
-  // check uniqueness
   if (await isPhoneTaken(phone, null)) throw new Error('This phone number is already registered');
   const ridersRef = ref(database, 'riders');
   const newRef = push(ridersRef);
@@ -169,7 +223,6 @@ function initAccountUI(){
   });
 }
 
-// Simple toast for confirmations
 function showToast(msg, timeout = 2500){
   let t = document.getElementById('__toast');
   if (!t){
@@ -186,10 +239,41 @@ function showToast(msg, timeout = 2500){
   t._h = setTimeout(()=>{ t.classList.remove('show'); }, timeout);
 }
 
+// ===== Booking step management =====
+function showBookingStep(step){
+  const s1 = document.getElementById('bookingStep1');
+  const s2 = document.getElementById('bookingStep2');
+  const s3 = document.getElementById('bookingStep3');
+  if (s1) s1.classList.toggle('hidden', step !== 1);
+  if (s2) s2.classList.toggle('hidden', step !== 2);
+  if (s3) s3.classList.toggle('hidden', step !== 3);
+}
+
+function updateStopsInfo(){
+  const stopsInfo = document.getElementById('stopsInfo');
+  const stopsCount = document.getElementById('stopsCount');
+  if (stops.length > 1 && stopsInfo && stopsCount) {
+    stopsCount.textContent = `${stops.length} stops`;
+    stopsInfo.classList.remove('hidden');
+  } else if (stopsInfo) {
+    stopsInfo.classList.add('hidden');
+  }
+}
+
+function updatePriceDisplay(){
+  const priceInfo = calculatePrice(selectedPassengers);
+  const paxLabel = document.getElementById('pricePaxLabel');
+  const zoneBadge = document.getElementById('priceZoneBadge');
+  const totalDisplay = document.getElementById('priceTotalDisplay');
+  if (paxLabel) paxLabel.textContent = `${selectedPassengers} × R${priceInfo.pricePerPerson}`;
+  if (zoneBadge) zoneBadge.style.display = priceInfo.isHikeZone ? '' : 'none';
+  if (totalDisplay) totalDisplay.textContent = `R${priceInfo.total}`;
+}
+
+// ===== Initialization =====
 document.addEventListener('DOMContentLoaded', () => {
   const bookBtn = document.getElementById('bookBtn');
 
-  // Init account system
   initAccountUI();
   const saved = loadSavedAccount();
   if (saved) {
@@ -197,10 +281,8 @@ document.addEventListener('DOMContentLoaded', () => {
     showAccountBadge(riderAccount);
   }
 
-  // Landing flow: user clicks "Find my location" to show map
   if (bookBtn) {
     bookBtn.addEventListener('click', async () => {
-      // Require account before proceeding
       if (!riderAccount) {
         showAccountModal(false);
         return;
@@ -240,7 +322,131 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   }
+
+  // Wire up booking step buttons
+  initBookingUI();
 });
+
+function initBookingUI(){
+  const addStopBtn = document.getElementById('addStopBtn');
+  const continueBtn = document.getElementById('continueBtn');
+  const clearBtn = document.getElementById('clearRouteBtn');
+  const step2BackBtn = document.getElementById('step2BackBtn');
+  const step2ContinueBtn = document.getElementById('step2ContinueBtn');
+  const step3BackBtn = document.getElementById('step3BackBtn');
+  const bookRideBtn = document.getElementById('bookRideBtn');
+
+  // Passenger pills
+  document.querySelectorAll('.passenger-pill').forEach(pill => {
+    pill.addEventListener('click', () => {
+      document.querySelectorAll('.passenger-pill').forEach(p => p.classList.remove('selected'));
+      pill.classList.add('selected');
+      selectedPassengers = parseInt(pill.getAttribute('data-count'), 10) || 1;
+    });
+  });
+
+  // Step 1: Add another stop
+  if (addStopBtn) addStopBtn.addEventListener('click', () => {
+    addingStop = true;
+    hideRidePanel();
+    setStatus('Tap the map to add another stop.');
+    const hint = document.getElementById('mapHint');
+    if (hint) { hint.textContent = 'Tap the map to add another stop'; hint.classList.remove('hidden'); }
+  });
+
+  // Step 1: Continue → Step 2
+  if (continueBtn) continueBtn.addEventListener('click', () => {
+    showBookingStep(2);
+  });
+
+  // Step 1: Clear
+  if (clearBtn) clearBtn.addEventListener('click', () => {
+    if (map) clearRoute(map);
+    stops = [];
+    currentRouteGeometry = null;
+    totalDistanceM = 0;
+    totalDurationS = 0;
+    addingStop = false;
+    hideRidePanel();
+    setStatus('Route cleared. Tap the map to choose a destination.');
+  });
+
+  // Step 2: Back → Step 1
+  if (step2BackBtn) step2BackBtn.addEventListener('click', () => {
+    showBookingStep(1);
+  });
+
+  // Step 2: Continue → Step 3
+  if (step2ContinueBtn) step2ContinueBtn.addEventListener('click', () => {
+    updatePriceDisplay();
+    showBookingStep(3);
+  });
+
+  // Step 3: Back → Step 2
+  if (step3BackBtn) step3BackBtn.addEventListener('click', () => {
+    showBookingStep(2);
+  });
+
+  // Step 3: Book ride
+  if (bookRideBtn) bookRideBtn.addEventListener('click', async () => {
+    if (!riderAccount) { showAccountModal(false); return; }
+    if (!lastKnownLatLng || !stops.length) { setStatus('Missing origin or destination.'); return; }
+
+    // Geofence check
+    if (!isInsideGeofence(lastKnownLatLng)) {
+      showToast('Mzala isn\u2019t available in your area yet');
+      setStatus('You\u2019re outside the service zone.');
+      return;
+    }
+
+    // Max trip distance check (check against furthest stop)
+    for (const s of stops) {
+      if (!isTripWithinLimit(lastKnownLatLng, s)) {
+        const maxKm = geofence && geofence.maxTripKm ? geofence.maxTripKm : '?';
+        showToast('A destination is too far');
+        setStatus(`Max trip distance is ${maxKm} km.`);
+        return;
+      }
+    }
+
+    const priceInfo = calculatePrice(selectedPassengers);
+    setStatus('Sending ride request…');
+    bookRideBtn.disabled = true;
+
+    try {
+      const reqRef = ref(database, 'ride_requests');
+      const newReq = push(reqRef);
+      await set(newReq, {
+        origin: { lat: lastKnownLatLng.lat, lng: lastKnownLatLng.lng },
+        destination: { lat: stops[stops.length - 1].lat, lng: stops[stops.length - 1].lng },
+        stops: stops.map(s => ({ lat: s.lat, lng: s.lng })),
+        geometry: currentRouteGeometry || null,
+        passengers: selectedPassengers,
+        pricePerPerson: priceInfo.pricePerPerson,
+        totalPrice: priceInfo.total,
+        isHikeZone: priceInfo.isHikeZone,
+        timestamp: Date.now(),
+        source: 'user_map_request',
+        rider: {
+          id: riderAccount.id,
+          username: riderAccount.username,
+          phone: riderAccount.phone
+        }
+      });
+      myRequestId = newReq.key;
+      try{ localStorage.setItem('myRequestId', myRequestId); }catch(e){}
+      attachRequestListener(myRequestId);
+      showToast('Ride booked!');
+      setStatus('Ride requested.');
+      bookRideBtn.disabled = true;
+      bookRideBtn.querySelector('span').textContent = 'Booked ✓';
+    } catch (e) {
+      console.error('Failed to send ride request', e);
+      setStatus('Failed to send request.');
+      bookRideBtn.disabled = false;
+    }
+  });
+}
 
 function ensureMapClick() {
   if (!map || mapClickRegistered) return;
@@ -250,20 +456,41 @@ function ensureMapClick() {
       setStatus('No known starting location — please tap "Center on me" first.');
       return;
     }
-    setStatus('Routing to destination…');
-    // Hide the hint banner once the user taps
+
+    // If the ride panel is showing step 2 or 3, ignore map clicks
+    const s2 = document.getElementById('bookingStep2');
+    const s3 = document.getElementById('bookingStep3');
+    if ((s2 && !s2.classList.contains('hidden')) || (s3 && !s3.classList.contains('hidden'))) return;
+
+    setStatus('Routing…');
     const hint = document.getElementById('mapHint');
     if (hint) hint.classList.add('hidden');
+
     try {
-      const { routeBetween } = await import('./map.js');
-      const result = await routeBetween(map, lastKnownLatLng, to);
-      currentDestination = to;
+      const { routeBetween, routeMultiStop } = await import('./map.js');
+
+      // Add destination to stops list
+      stops.push({ lat: to.lat, lng: to.lng });
+      addingStop = false;
+
+      let result;
+      if (stops.length === 1) {
+        result = await routeBetween(map, lastKnownLatLng, to);
+      } else {
+        result = await routeMultiStop(map, lastKnownLatLng, stops);
+      }
+
       currentRouteGeometry = result.geometry || null;
+      totalDistanceM = result.distance;
+      totalDurationS = result.duration;
+
       const km = (result.distance / 1000).toFixed(2);
       const mins = Math.round(result.duration / 60);
       showRidePanel(km, mins);
       setStatus(`Route: ${km} km · ~${mins} min`);
     } catch (err) {
+      // Revert the stop we just added on failure
+      stops.pop();
       setStatus('Routing failed: ' + (err && err.message ? err.message : 'unknown'));
     }
   });
@@ -274,70 +501,17 @@ function showRidePanel(km, mins) {
   const panel = document.getElementById('ridePanel');
   const distEl = document.getElementById('rideDistance');
   const durEl = document.getElementById('rideDuration');
-  const requestBtn = document.getElementById('requestBtn');
-  const clearBtn = document.getElementById('clearRouteBtn');
   if (distEl) distEl.textContent = km;
   if (durEl) durEl.textContent = mins;
   if (panel) panel.classList.remove('hidden');
+  updateStopsInfo();
+  showBookingStep(1);
 
-  if (requestBtn) {
-    requestBtn.onclick = async () => {
-      if (!riderAccount) {
-        showAccountModal(false);
-        return;
-      }
-      if (!lastKnownLatLng || !currentDestination) {
-        setStatus('Missing origin or destination.');
-        return;
-      }
-      // Geofence check
-      if (!isInsideGeofence(lastKnownLatLng)) {
-        showToast('Mzala isn\u2019t available in your area yet');
-        setStatus('You\u2019re outside the service zone. Move closer and try again.');
-        return;
-      }
-      // Max trip distance check
-      if (!isTripWithinLimit(lastKnownLatLng, currentDestination)) {
-        const maxKm = geofence && geofence.maxTripKm ? geofence.maxTripKm : '?';
-        showToast('That destination is too far');
-        setStatus(`Max trip distance is ${maxKm} km. Choose a closer destination.`);
-        return;
-      }
-      setStatus('Sending ride request…');
-      try {
-        const reqRef = ref(database, 'ride_requests');
-        const newReq = push(reqRef);
-        await set(newReq, {
-          origin: { lat: lastKnownLatLng.lat, lng: lastKnownLatLng.lng },
-          destination: { lat: currentDestination.lat, lng: currentDestination.lng },
-          geometry: currentRouteGeometry || null,
-          timestamp: Date.now(),
-          source: 'user_map_request',
-          rider: {
-            id: riderAccount.id,
-            username: riderAccount.username,
-            phone: riderAccount.phone
-          }
-        });
-        myRequestId = newReq.key;
-        try{ localStorage.setItem('myRequestId', myRequestId); }catch(e){}
-        attachRequestListener(myRequestId);
-        showToast('Ride request sent');
-        setStatus('Ride requested.');
-        // disable the request button to prevent duplicate sends
-        requestBtn.disabled = true; requestBtn.textContent = 'Requested ✓'; requestBtn.style.background = '#06c167'; requestBtn.style.color = '#fff';
-      } catch (e) {
-        console.error('Failed to send ride request', e);
-        setStatus('Failed to send request.');
-      }
-    };
-  }
-  if (clearBtn) {
-    clearBtn.onclick = () => {
-      if (map) clearRoute(map);
-      hideRidePanel();
-      setStatus('Route cleared.');
-    };
+  // Reset book button state
+  const bookRideBtn = document.getElementById('bookRideBtn');
+  if (bookRideBtn) {
+    bookRideBtn.disabled = false;
+    bookRideBtn.querySelector('span').textContent = 'Book Ride';
   }
 }
 

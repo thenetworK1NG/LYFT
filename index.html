@@ -53,25 +53,75 @@
   <!-- ===== STATUS BAR ===== -->
   <div id="status" class="hidden" aria-live="polite"></div>
 
-  <!-- ===== RIDE PANEL (bottom sheet) ===== -->
+  <!-- ===== RIDE PANEL (bottom sheet) — multi-step booking ===== -->
   <div id="ridePanel" class="hidden" role="region" aria-label="Ride details">
     <div class="ride-handle"></div>
-    <div class="ride-info-row">
-      <div class="ride-stat">
-        <span class="ride-stat-value" id="rideDistance">—</span>
-        <span class="ride-stat-label">km</span>
+
+    <!-- Step 1: Route info + add stop / continue -->
+    <div id="bookingStep1">
+      <div class="ride-info-row">
+        <div class="ride-stat">
+          <span class="ride-stat-value" id="rideDistance">—</span>
+          <span class="ride-stat-label">km</span>
+        </div>
+        <div class="ride-divider"></div>
+        <div class="ride-stat">
+          <span class="ride-stat-value" id="rideDuration">—</span>
+          <span class="ride-stat-label">min</span>
+        </div>
       </div>
-      <div class="ride-divider"></div>
-      <div class="ride-stat">
-        <span class="ride-stat-value" id="rideDuration">—</span>
-        <span class="ride-stat-label">min</span>
+      <div id="stopsInfo" class="stops-info hidden">
+        <span id="stopsCount">1 stop</span>
+      </div>
+      <div class="ride-actions">
+        <button id="addStopBtn" class="ride-addstop-btn">+ Add another stop</button>
+        <button id="continueBtn" class="ride-continue-btn">Continue</button>
+        <button id="clearRouteBtn" class="ride-clear-btn">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
       </div>
     </div>
-    <div class="ride-actions">
-      <button id="requestBtn" class="ride-request-btn">Request Mzala</button>
-      <button id="clearRouteBtn" class="ride-clear-btn">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>
+
+    <!-- Step 2: How many passengers -->
+    <div id="bookingStep2" class="hidden">
+      <h3 class="step-title">How many passengers?</h3>
+      <div class="passenger-selector">
+        <button class="passenger-pill selected" data-count="1">
+          <span class="passenger-pill-icon">🧑</span>
+          <span>Just me</span>
+        </button>
+        <button class="passenger-pill" data-count="2">
+          <span class="passenger-pill-icon">🧑‍🤝‍🧑</span>
+          <span>Me + 1</span>
+        </button>
+        <button class="passenger-pill" data-count="3">
+          <span class="passenger-pill-icon">👨‍👩‍👦</span>
+          <span>Me + 2</span>
+        </button>
+      </div>
+      <div class="step2-actions">
+        <button id="step2BackBtn" class="ride-back-btn">← Back</button>
+        <button id="step2ContinueBtn" class="ride-continue-btn" style="flex:1">Continue</button>
+      </div>
+    </div>
+
+    <!-- Step 3: Book ride with price -->
+    <div id="bookingStep3" class="hidden">
+      <div class="price-summary">
+        <div class="price-line">
+          <span class="price-label" id="pricePaxLabel">1 × R20</span>
+          <span class="price-badge" id="priceZoneBadge" style="display:none">HIKE ZONE</span>
+        </div>
+        <div class="price-total" id="priceTotalDisplay">R20</div>
+      </div>
+      <div class="book-btn-wrap">
+        <button id="bookRideBtn" class="book-ride-btn">
+          <span>Book Ride</span>
+        </button>
+      </div>
+      <div class="step3-actions">
+        <button id="step3BackBtn" class="ride-back-btn">← Back</button>
+      </div>
     </div>
   </div>
 

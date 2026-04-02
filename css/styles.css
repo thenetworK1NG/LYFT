@@ -338,6 +338,199 @@ body {
 .ride-clear-btn:active { background: var(--surface-3); }
 
 /* =============================================
+   MULTI-STEP BOOKING FLOW
+   ============================================= */
+
+/* Stops info badge */
+.stops-info {
+  text-align: center;
+  margin-bottom: 14px;
+}
+.stops-info span {
+  display: inline-block;
+  padding: 4px 14px;
+  border-radius: var(--pill);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-2);
+  letter-spacing: 0.2px;
+}
+
+/* Add stop & continue buttons */
+.ride-addstop-btn {
+  flex: 1;
+  padding: 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-light);
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-family: var(--font);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.ride-addstop-btn:active { background: var(--surface-3); }
+
+.ride-continue-btn {
+  flex: 1;
+  padding: 14px;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: var(--text);
+  color: var(--black);
+  font-family: var(--font);
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+}
+.ride-continue-btn:active { transform: scale(0.97); background: #e0e0e0; }
+
+.ride-back-btn {
+  padding: 12px 18px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-family: var(--font);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.ride-back-btn:active { background: var(--surface-3); }
+
+/* Step title */
+.step-title {
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: var(--text);
+  text-align: center;
+  margin-bottom: 20px;
+  letter-spacing: -0.3px;
+}
+
+/* Passenger selector */
+.passenger-selector {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.passenger-pill {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 16px 8px;
+  border-radius: var(--radius-sm);
+  border: 2px solid var(--border-light);
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-family: var(--font);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s, transform 0.1s;
+}
+
+.passenger-pill:active { transform: scale(0.96); }
+
+.passenger-pill.selected {
+  border-color: var(--green);
+  background: var(--green-glow);
+  color: var(--text);
+}
+
+.passenger-pill-icon {
+  font-size: 1.4rem;
+}
+
+.step2-actions {
+  display: flex;
+  gap: 10px;
+}
+
+/* Step 3: price summary + book button */
+.price-summary {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.price-line {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.price-label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.price-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: var(--pill);
+  background: rgba(230,126,34,0.15);
+  color: #e67e22;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.price-total {
+  font-size: 2.2rem;
+  font-weight: 900;
+  color: var(--text);
+  letter-spacing: -1px;
+}
+
+.book-btn-wrap {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+.book-ride-btn {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  border: none;
+  background: var(--green);
+  color: #fff;
+  font-family: var(--font);
+  font-size: 1.05rem;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 6px 28px rgba(6,193,103,0.35);
+  transition: transform 0.15s, box-shadow 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.book-ride-btn:active { transform: scale(0.93); box-shadow: 0 2px 12px rgba(6,193,103,0.25); }
+.book-ride-btn:disabled {
+  background: var(--surface-3);
+  color: var(--text-muted);
+  box-shadow: none;
+  cursor: default;
+  transform: none;
+}
+
+.step3-actions {
+  display: flex;
+  justify-content: center;
+}
+
+/* =============================================
    ACCOUNT MODAL (bottom sheet)
    ============================================= */
 .modal-overlay {
