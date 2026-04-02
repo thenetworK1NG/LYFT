@@ -245,8 +245,8 @@ function showRidePanel(km, mins) {
   const durEl = document.getElementById('rideDuration');
   const requestBtn = document.getElementById('requestBtn');
   const clearBtn = document.getElementById('clearRouteBtn');
-  if (distEl) distEl.textContent = `${km} km`;
-  if (durEl) durEl.textContent = `~${mins} min`;
+  if (distEl) distEl.textContent = km;
+  if (durEl) durEl.textContent = mins;
   if (panel) panel.classList.remove('hidden');
 
   if (requestBtn) {
@@ -281,7 +281,7 @@ function showRidePanel(km, mins) {
         showToast('Ride request sent');
         setStatus('Ride requested.');
         // disable the request button to prevent duplicate sends
-        requestBtn.disabled = true; requestBtn.textContent = 'Requested ✓';
+        requestBtn.disabled = true; requestBtn.textContent = 'Requested ✓'; requestBtn.style.background = '#06c167'; requestBtn.style.color = '#fff';
       } catch (e) {
         console.error('Failed to send ride request', e);
         setStatus('Failed to send request.');
@@ -319,7 +319,7 @@ function ensureRideStatusEl(){
   const panel = document.getElementById('ridePanel');
   if (!panel) return null;
   if (!el){
-    el = document.createElement('div'); el.id = 'rideStatus'; el.style.marginTop = '8px'; el.style.fontSize = '14px'; el.style.color = '#0b63d6';
+    el = document.createElement('div'); el.id = 'rideStatus'; el.style.marginTop = '12px'; el.style.fontSize = '0.85rem'; el.style.fontWeight = '600'; el.style.color = '#06c167'; el.style.textAlign = 'center';
     panel.appendChild(el);
   }
   return el;
