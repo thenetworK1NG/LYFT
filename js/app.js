@@ -293,18 +293,37 @@ document.addEventListener('DOMContentLoaded', () => {
         showAccountModal(false);
         return;
       }
-      showMapUI();
+      // Show loader overlay (map stays hidden)
+      const loader = document.getElementById('locLoader');
+      const landing = document.getElementById('landing');
+      if (landing) landing.classList.add('hidden');
+      if (loader) loader.classList.remove('hidden');
+
+      // Create map in background while locating
       if (!map) {
         map = createMap('map');
         ensureMapClick();
-        setTimeout(() => { if (map && typeof map.invalidateSize === 'function') map.invalidateSize(); }, 300);
       }
-      setStatus('Locating…');
       try {
         const res = await locateOnce(map);
         if (res && res.marker) lastKnownLatLng = res.marker.getLatLng();
-        setStatus('Located you on the map. Tap the map to choose a destination.');
+        // Animate loader out, then show map
+        if (loader) {
+          loader.classList.add('loc-done');
+          setTimeout(() => {
+            loader.classList.add('hidden');
+            loader.classList.remove('loc-done');
+            showMapUI();
+            if (map) map.invalidateSize();
+          }, 600);
+        } else {
+          showMapUI();
+          if (map) map.invalidateSize();
+        }
       } catch (err) {
+        if (loader) loader.classList.add('hidden');
+        showMapUI();
+        if (map) map.invalidateSize();
         setStatus('Location error: ' + (err && (err.message || err.code) ? (err.message || err.code) : 'unknown'));
       }
     });
@@ -322,7 +341,7 @@ document.addEventListener('DOMContentLoaded', () => {
       try {
         const res = await locateOnce(map);
         if (res && res.marker) lastKnownLatLng = res.marker.getLatLng();
-        setStatus('Located you on the map.');
+        setStatus('');
       } catch (err) {
         setStatus('Location error: ' + (err && (err.message || err.code) ? (err.message || err.code) : 'unknown'));
       }

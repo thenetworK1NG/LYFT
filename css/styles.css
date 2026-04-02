@@ -54,6 +54,56 @@ body {
 ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 2px; }
 
 /* =============================================
+   LOCATION LOADER
+   ============================================= */
+#locLoader {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+}
+.loc-loader-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  animation: fade-up 0.5s ease;
+}
+.loc-loader-icon {
+  width: 90px;
+  height: 90px;
+  animation: loc-spin 1.8s ease-in-out infinite;
+}
+.loc-loader-text {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+}
+@keyframes loc-spin {
+  0%   { transform: rotate(0deg) scale(1); }
+  25%  { transform: rotate(90deg) scale(1.08); }
+  50%  { transform: rotate(180deg) scale(1); }
+  75%  { transform: rotate(270deg) scale(1.08); }
+  100% { transform: rotate(360deg) scale(1); }
+}
+#locLoader.loc-done .loc-loader-icon {
+  animation: loc-land 0.5s ease forwards;
+}
+#locLoader.loc-done .loc-loader-text {
+  transition: opacity 0.3s;
+  opacity: 0;
+}
+@keyframes loc-land {
+  0%   { transform: rotate(360deg) scale(1); }
+  50%  { transform: rotate(360deg) scale(1.15); }
+  100% { transform: rotate(360deg) scale(1); opacity: 0; }
+}
+
+/* =============================================
    LANDING SCREEN
    ============================================= */
 #landing {
